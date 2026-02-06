@@ -71,11 +71,12 @@ export const drawShape = (shape, doodle) => {
   const isEdit =
     doodle.tempShape && doodle.tempShape.id && doodle.tempShape.id === shape.id
 
+  const shapeStrokeWidth = shape.strokeWidth ?? doodle.strokeWidth
   const strokeWidth =
-    (isHover ? doodle.strokeWidth + 1 : doodle.strokeWidth) / doodle.scale
+    (isHover ? shapeStrokeWidth + 1 : shapeStrokeWidth) / doodle.scale
   const pointRadius =
     (isHover ? doodle.pointRadius + 1 : doodle.pointRadius) / doodle.scale
-  const alpha = isEdit ? 0.2 : 0
+  const alpha = shape.fillAlpha ?? (isEdit ? 0.2 : 0)
   const color = shape.id
     ? shape.color || doodle.defaultColor
     : shape.color || doodle.brushColor
