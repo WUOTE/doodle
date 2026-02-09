@@ -225,7 +225,11 @@ export const generateArrowPath = (shape, doodle) => {
   const endPoint = [shape.pos[2], shape.pos[3]]
   // @ts-ignore
   const angle = lineAngle([startPoint, endPoint])
-  const referencePoint = [endPoint[0], endPoint[1] + 10 / doodle.scale]
+  // Arrow head size: mildly scales with stroke width, constant screen size
+  const shapeStrokeWidth = shape.strokeWidth ?? doodle.strokeWidth
+  const baseSize = Math.max(12, shapeStrokeWidth * 2.5)
+  const arrowSize = baseSize / doodle.scale
+  const referencePoint = [endPoint[0], endPoint[1] + arrowSize]
   // @ts-ignore
   const pointA = pointRotate(referencePoint, angle + 90 + 30, endPoint)
   // @ts-ignore
