@@ -91,6 +91,7 @@ export const drawShape = (shape, doodle) => {
       graphics.stroke({
         width: strokeWidth,
         color: doodle.parseColor(color),
+        join: 'miter', // Sharp corners for rectangles
       })
       graphics.fill({
         color: doodle.parseColor(color),
@@ -103,6 +104,7 @@ export const drawShape = (shape, doodle) => {
       graphics.stroke({
         width: strokeWidth,
         color: doodle.parseColor(color),
+        join: 'miter', // Sharp corners for polygons
       })
       graphics.fill({
         color: doodle.parseColor(color),
@@ -165,6 +167,7 @@ export const drawShape = (shape, doodle) => {
       graphics.stroke({
         width: strokeWidth,
         color: doodle.parseColor(color),
+        join: 'miter', // Sharp corners for closed paths
       })
       graphics.fill({
         color: doodle.parseColor(color),
