@@ -65642,12 +65642,18 @@ const drawShapes = (doodle) => {
   doodle.graphics.clear();
   // 已有形状
   for (const shape of doodle.shapes) {
-    if (doodle.tempShape && doodle.tempShape.id === shape.id) continue
     if (shape.type === doodle.tools.point) continue
+    // Draw selected shape in its original layer position
+    if (doodle.tempShape && doodle.tempShape.id === shape.id) {
+      drawShape(doodle.tempShape, doodle);
+      continue
+    }
     drawShape(shape, doodle);
   }
-  // 新增形状
-  if (doodle.tempShape) drawShape(doodle.tempShape, doodle);
+  // Only draw on top if it's a NEW shape being created (no id yet)
+  if (doodle.tempShape && !doodle.tempShape.id) {
+    drawShape(doodle.tempShape, doodle);
+  }
   // Multi-select highlight
   drawSelectionHighlight(doodle);
   // Rubber band selection rect
@@ -87520,6 +87526,9 @@ class Doodle {
         e.preventDefaultAction = true;
       }
     }
+    // Ensure hover state is current before handling press
+    this.hoverShape = getHoverShape(this);
+    this.hoverAnchor = getHoverAnchor(this);
     handleMouseDown(this);
     // 计算锚点
     generateAnchors(this);
@@ -87530,6 +87539,9 @@ class Doodle {
   releaseHandler = (e) => {
     this.mouse.isPressed = false;
     this.mouse.shiftKey = e?.originalEvent?.shiftKey || false;
+    // Ensure hover state is current before handling release
+    this.hoverShape = getHoverShape(this);
+    this.hoverAnchor = getHoverAnchor(this);
     handleMouseUp(this);
     // 计算锚点
     generateAnchors(this);
@@ -87667,13 +87679,29 @@ class Doodle {
   }
   // 更新图形（批量）
   updateShapes(shapes) {
-    this.removeShapes(shapes);
-    this.addShapes(shapes);
+    for (const shape of shapes) {
+      this.updateShape(shape);
+    }
   }
-  // 更新图形
+  // 更新图形 (preserves array position)
   updateShape(shape) {
-    this.removeShape(shape);
-    this.addShape(shape);
+    const _shape = _.cloneDeep(shape);
+    const idx = this.shapes.findIndex(item => item.id === shape.id);
+    if (idx !== -1) {
+      this.shapes[idx] = _shape;
+    } else {
+      this.shapes.push(_shape);
+    }
+    this.bounds.remove(getBounds(shape, this), (a, b) => a.id === b.id);
+    this.bounds.insert(getBounds(_shape, this));
+    if (shape.type === this.tools.point) {
+      this.generatePoints();
+    }
+    // @ts-ignore
+    if (shape.id === this.tempShape?.id) {
+      this.tempShape = null;
+    }
+    generateAnchors(this);
   }
   // 选择图形
   selectShape(shape) {

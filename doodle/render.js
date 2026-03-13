@@ -56,12 +56,18 @@ export const drawShapes = (doodle) => {
   doodle.graphics.clear()
   // 已有形状
   for (const shape of doodle.shapes) {
-    if (doodle.tempShape && doodle.tempShape.id === shape.id) continue
     if (shape.type === doodle.tools.point) continue
+    // Draw selected shape in its original layer position
+    if (doodle.tempShape && doodle.tempShape.id === shape.id) {
+      drawShape(doodle.tempShape, doodle)
+      continue
+    }
     drawShape(shape, doodle)
   }
-  // 新增形状
-  if (doodle.tempShape) drawShape(doodle.tempShape, doodle)
+  // Only draw on top if it's a NEW shape being created (no id yet)
+  if (doodle.tempShape && !doodle.tempShape.id) {
+    drawShape(doodle.tempShape, doodle)
+  }
   // Multi-select highlight
   drawSelectionHighlight(doodle)
   // Rubber band selection rect
