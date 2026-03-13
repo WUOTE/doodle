@@ -155,10 +155,23 @@ export class Doodle {
     // 更新鼠标样式
     this.updateCursor()
   }
+  // Update mouse pixel position from an OSD event
+  updateMouseFromEvent(e) {
+    if (!e?.position) return
+    const viewport = this.viewer.viewport
+    let x = e.position.x
+    let y = e.position.y
+    if (viewport.getFlip()) {
+      x = viewport._containerInnerSize.x - x
+    }
+    this.mouse.x = x
+    this.mouse.y = y
+  }
   // 按下处理器
   pressHandler = (e) => {
     this.mouse.isPressed = true
     this.mouse.shiftKey = e?.originalEvent?.shiftKey || false
+    this.updateMouseFromEvent(e)
     // Prevent OSD default during multi-select operations
     if (e && e.preventDefaultAction !== undefined && this.mode === this.tools.move) {
       if (this.mouse.shiftKey || this.selectedShapes.size > 0) {
@@ -178,6 +191,7 @@ export class Doodle {
   releaseHandler = (e) => {
     this.mouse.isPressed = false
     this.mouse.shiftKey = e?.originalEvent?.shiftKey || false
+    this.updateMouseFromEvent(e)
     // Ensure hover state is current before handling release
     this.hoverShape = getHoverShape(this)
     this.hoverAnchor = getHoverAnchor(this)
@@ -280,6 +294,16 @@ export class Doodle {
   addShape(shape) {
     const _shape = _.cloneDeep(shape)
     this.shapes.push(_shape)
+    this.bounds.insert(getBounds(_shape, this))
+    if (shape.type === this.tools.point) {
+      this.generatePoints()
+    }
+  }
+  // 添加图形到指定位置
+  insertShapeAt(shape, index) {
+    const _shape = _.cloneDeep(shape)
+    const idx = Math.min(index, this.shapes.length)
+    this.shapes.splice(idx, 0, _shape)
     this.bounds.insert(getBounds(_shape, this))
     if (shape.type === this.tools.point) {
       this.generatePoints()

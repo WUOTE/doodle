@@ -83357,14 +83357,14 @@ const getHoverShape = (doodle) => {
   if (detailedHitBounds.length) {
     if (detailedHitBounds.length === 1) {
       ret = shapes.find((item) => item.id === detailedHitBounds[0].id);
+    } else {
+      detailedHitBounds.sort((a, b) => {
+        const shapeA = shapes.find((item) => item.id === a.id);
+        const shapeB = shapes.find((item) => item.id === b.id);
+        return getShapeArea(doodle, shapeA) - getShapeArea(doodle, shapeB)
+      });
+      ret = shapes.find((item) => item.id === detailedHitBounds[0].id);
     }
-    detailedHitBounds.sort((a, b) => {
-      const shapeA = shapes.find((item) => item.id === a.id);
-      const shapeB = shapes.find((item) => item.id === b.id);
-      // @ts-ignore
-      return getShapeArea(doodle, shapeA) - getShapeArea(doodle, shapeB)
-    });
-    ret = shapes.find((item) => item.id === detailedHitBounds[0].id);
   }
   // 单个shape只读的控制
   if (ret && ret.readonly) {
@@ -83604,11 +83604,12 @@ const getMouseHandler = (doodle) => {
             // Shift+click shape: toggle in selection
             // If single shape was selected, promote it to multi-selection first
             if (doodle.tempShape?.id) {
-              const orig = doodle.shapes.find(item => item.id === doodle.tempShape.id);
+              const tempId = doodle.tempShape.id;
+              const orig = doodle.shapes.find(item => item.id === tempId);
               if (orig && JSON.stringify(orig) !== JSON.stringify(doodle.tempShape)) {
                 doodle.conf.onUpdate && doodle.conf.onUpdate(_.cloneDeep(doodle.tempShape));
               }
-              doodle.selectedShapes.add(doodle.tempShape.id);
+              doodle.selectedShapes.add(tempId);
               doodle.cancelSelectShape();
             }
             doodle.toggleInSelection(doodle.hoverShape.id);
@@ -87516,10 +87517,23 @@ class Doodle {
     // 更新鼠标样式
     this.updateCursor();
   }
+  // Update mouse pixel position from an OSD event
+  updateMouseFromEvent(e) {
+    if (!e?.position) return
+    const viewport = this.viewer.viewport;
+    let x = e.position.x;
+    let y = e.position.y;
+    if (viewport.getFlip()) {
+      x = viewport._containerInnerSize.x - x;
+    }
+    this.mouse.x = x;
+    this.mouse.y = y;
+  }
   // 按下处理器
   pressHandler = (e) => {
     this.mouse.isPressed = true;
     this.mouse.shiftKey = e?.originalEvent?.shiftKey || false;
+    this.updateMouseFromEvent(e);
     // Prevent OSD default during multi-select operations
     if (e && e.preventDefaultAction !== undefined && this.mode === this.tools.move) {
       if (this.mouse.shiftKey || this.selectedShapes.size > 0) {
@@ -87539,6 +87553,7 @@ class Doodle {
   releaseHandler = (e) => {
     this.mouse.isPressed = false;
     this.mouse.shiftKey = e?.originalEvent?.shiftKey || false;
+    this.updateMouseFromEvent(e);
     // Ensure hover state is current before handling release
     this.hoverShape = getHoverShape(this);
     this.hoverAnchor = getHoverAnchor(this);
@@ -87639,6 +87654,16 @@ class Doodle {
   addShape(shape) {
     const _shape = _.cloneDeep(shape);
     this.shapes.push(_shape);
+    this.bounds.insert(getBounds(_shape, this));
+    if (shape.type === this.tools.point) {
+      this.generatePoints();
+    }
+  }
+  // 添加图形到指定位置
+  insertShapeAt(shape, index) {
+    const _shape = _.cloneDeep(shape);
+    const idx = Math.min(index, this.shapes.length);
+    this.shapes.splice(idx, 0, _shape);
     this.bounds.insert(getBounds(_shape, this));
     if (shape.type === this.tools.point) {
       this.generatePoints();

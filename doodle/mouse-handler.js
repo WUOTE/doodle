@@ -78,11 +78,12 @@ export const getMouseHandler = (doodle) => {
             // Shift+click shape: toggle in selection
             // If single shape was selected, promote it to multi-selection first
             if (doodle.tempShape?.id) {
-              const orig = doodle.shapes.find(item => item.id === doodle.tempShape.id)
+              const tempId = doodle.tempShape.id
+              const orig = doodle.shapes.find(item => item.id === tempId)
               if (orig && JSON.stringify(orig) !== JSON.stringify(doodle.tempShape)) {
                 doodle.conf.onUpdate && doodle.conf.onUpdate(_.cloneDeep(doodle.tempShape))
               }
-              doodle.selectedShapes.add(doodle.tempShape.id)
+              doodle.selectedShapes.add(tempId)
               doodle.cancelSelectShape()
             }
             doodle.toggleInSelection(doodle.hoverShape.id)

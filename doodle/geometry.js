@@ -207,14 +207,14 @@ export const getHoverShape = (doodle) => {
   if (detailedHitBounds.length) {
     if (detailedHitBounds.length === 1) {
       ret = shapes.find((item) => item.id === detailedHitBounds[0].id)
+    } else {
+      detailedHitBounds.sort((a, b) => {
+        const shapeA = shapes.find((item) => item.id === a.id)
+        const shapeB = shapes.find((item) => item.id === b.id)
+        return getShapeArea(doodle, shapeA) - getShapeArea(doodle, shapeB)
+      })
+      ret = shapes.find((item) => item.id === detailedHitBounds[0].id)
     }
-    detailedHitBounds.sort((a, b) => {
-      const shapeA = shapes.find((item) => item.id === a.id)
-      const shapeB = shapes.find((item) => item.id === b.id)
-      // @ts-ignore
-      return getShapeArea(doodle, shapeA) - getShapeArea(doodle, shapeB)
-    })
-    ret = shapes.find((item) => item.id === detailedHitBounds[0].id)
   }
   // 单个shape只读的控制
   if (ret && ret.readonly) {
