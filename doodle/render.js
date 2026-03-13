@@ -1,5 +1,6 @@
 import osd from "openseadragon"
 import { lineAngle, pointRotate } from "geometric"
+import { getBounds } from "./bounds"
 
 // 渲染方法
 export const render = (doodle) => {
@@ -61,6 +62,10 @@ export const drawShapes = (doodle) => {
   }
   // 新增形状
   if (doodle.tempShape) drawShape(doodle.tempShape, doodle)
+  // Multi-select highlight
+  drawSelectionHighlight(doodle)
+  // Rubber band selection rect
+  drawSelectionRect(doodle)
   // 锚点
   drawAnchors(doodle)
 }
@@ -256,4 +261,51 @@ export const drawAnchors = (doodle) => {
       alpha: 1,
     })
   }
+}
+
+// Draw highlight around multi-selected shapes
+export const drawSelectionHighlight = (doodle) => {
+  if (!doodle.selectedShapes.size) return
+  const graphics = doodle.graphics
+  const strokeWidth = 2 / doodle.scale
+  const padding = 4 / doodle.scale
+
+  for (const id of doodle.selectedShapes) {
+    const shape = doodle.shapes.find(s => s.id === id)
+    if (!shape) continue
+    const b = getBounds(shape, doodle)
+    graphics.rect(
+      b.minX - padding,
+      b.minY - padding,
+      b.maxX - b.minX + padding * 2,
+      b.maxY - b.minY + padding * 2,
+    )
+    graphics.stroke({
+      width: strokeWidth,
+      color: 0x4488FF,
+    })
+    graphics.fill({ alpha: 0 })
+  }
+}
+
+// Draw rubber band selection rectangle
+export const drawSelectionRect = (doodle) => {
+  if (!doodle.selectionRect) return
+  const rect = doodle.selectionRect
+  const graphics = doodle.graphics
+  const x = Math.min(rect.x1, rect.x2)
+  const y = Math.min(rect.y1, rect.y2)
+  const w = Math.abs(rect.x2 - rect.x1)
+  const h = Math.abs(rect.y2 - rect.y1)
+  const strokeWidth = 1 / doodle.scale
+
+  graphics.rect(x, y, w, h)
+  graphics.stroke({
+    width: strokeWidth,
+    color: 0x4488FF,
+  })
+  graphics.fill({
+    color: 0x4488FF,
+    alpha: 0.1,
+  })
 }

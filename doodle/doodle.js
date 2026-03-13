@@ -64,6 +64,8 @@ export class Doodle {
   tempShape = null // 临时shape（新增和编辑时）
   hoverShape = null // 悬浮的shape
   hoverAnchor = null // 悬浮的锚点
+  selectedShapes = new Set() // multi-select: IDs of selected shapes
+  selectionRect = null // rubber band selection rect {x1,y1,x2,y2}
   readonly = false // 只读模式
   // 鼠标
   mouse = {
@@ -72,6 +74,7 @@ export class Doodle {
     dx: 0, // 画布x
     dy: 0, // 画布y
     isPressed: false, // 是否按下
+    shiftKey: false, // shift键是否按下
   }
   constructor(conf) {
     // 存储配置
@@ -99,6 +102,8 @@ export class Doodle {
     this.tempShape = null
     this.shapes = []
     this.anchors = []
+    this.selectedShapes.clear()
+    this.selectionRect = null
     this.bounds.clear()
     this.generatePoints()
   }
@@ -133,6 +138,13 @@ export class Doodle {
     )
     this.mouse.dx = dp.x
     this.mouse.dy = dp.y
+    this.mouse.shiftKey = e?.originalEvent?.shiftKey ?? e?.shiftKey ?? false
+    // Prevent OSD panning during multi-select operations
+    if (e.preventDefaultAction !== undefined && this.mode === this.tools.move) {
+      if (this.mouse.shiftKey || this.selectedShapes.size > 0) {
+        e.preventDefaultAction = true
+      }
+    }
     handleMouseMove(this)
     // 悬浮的shape
     this.hoverShape = getHoverShape(this)
@@ -144,8 +156,15 @@ export class Doodle {
     this.updateCursor()
   }
   // 按下处理器
-  pressHandler = () => {
+  pressHandler = (e) => {
     this.mouse.isPressed = true
+    this.mouse.shiftKey = e?.originalEvent?.shiftKey || false
+    // Prevent OSD default during multi-select operations
+    if (e && e.preventDefaultAction !== undefined && this.mode === this.tools.move) {
+      if (this.mouse.shiftKey || this.selectedShapes.size > 0) {
+        e.preventDefaultAction = true
+      }
+    }
     handleMouseDown(this)
     // 计算锚点
     generateAnchors(this)
@@ -153,8 +172,9 @@ export class Doodle {
     this.updateCursor()
   }
   // 释放处理器
-  releaseHandler = () => {
+  releaseHandler = (e) => {
     this.mouse.isPressed = false
+    this.mouse.shiftKey = e?.originalEvent?.shiftKey || false
     handleMouseUp(this)
     // 计算锚点
     generateAnchors(this)
@@ -172,6 +192,7 @@ export class Doodle {
   setMode(mode) {
     this.mode = mode
     this.setPan(mode === this.tools.move)
+    this.clearSelection()
     this.cancelSelectShape()
   }
   // 设置允许拖动
@@ -193,6 +214,21 @@ export class Doodle {
     onKeyStroke(["Delete"], async (e) => {
       switch (e.code) {
         case "Delete":
+          // Multi-select delete
+          if (this.selectedShapes.size > 0) {
+            const toRemove = []
+            for (const id of this.selectedShapes) {
+              const shape = this.shapes.find(s => s.id === id)
+              if (shape) toRemove.push(shape)
+            }
+            this.clearSelection()
+            if (this.conf.onMultiRemove) {
+              this.conf.onMultiRemove(toRemove)
+            } else {
+              for (const shape of toRemove) this.conf.onRemove(shape)
+            }
+            break
+          }
           // @ts-ignore
           if (this.tempShape && this.tempShape.id) {
             this.conf.onRemove(this.tempShape)
@@ -336,6 +372,23 @@ export class Doodle {
       app: app,
     }
   }
+  // Toggle shape in multi-selection
+  toggleInSelection(shapeId) {
+    if (this.selectedShapes.has(shapeId)) {
+      this.selectedShapes.delete(shapeId)
+    } else {
+      this.selectedShapes.add(shapeId)
+    }
+  }
+  // Clear multi-selection
+  clearSelection() {
+    this.selectedShapes.clear()
+    this.selectionRect = null
+  }
+  // Check if shape is multi-selected
+  isSelected(shapeId) {
+    return this.selectedShapes.has(shapeId)
+  }
   // 获取比例
   getScale() {
     const viewer = this.viewer
@@ -374,10 +427,15 @@ export class Doodle {
       if (this.tempShape && this.hoverShape?.id === this.tempShape?.id) {
         // 悬浮的shape是编辑状态
         if (this.mouse.isPressed) {
-          // 按下状态
           cursor = "grabbing"
         } else {
-          // 未按下状态
+          cursor = "grab"
+        }
+      } else if (this.selectedShapes.size > 0 && this.selectedShapes.has(this.hoverShape?.id)) {
+        // 悬浮在多选shape上
+        if (this.mouse.isPressed) {
+          cursor = "grabbing"
+        } else {
           cursor = "grab"
         }
       } else {

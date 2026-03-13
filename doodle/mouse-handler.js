@@ -21,6 +21,43 @@ let tempCurMousePoint = null // 开始编辑前的鼠标位置
 let tempShape = null // 开始编辑前形状的副本
 let tempAnchor = null // 开始编辑前锚点的副本
 
+// Multi-select state
+let multiDragStart = null // start mouse position for multi-drag
+let multiDragShapes = null // Map<id, clonedShape> original positions
+let isRubberBanding = false // rubber-band selection active
+let rubberBandStart = null // start position of rubber band
+let multiSelectActionDone = false // flag to skip normal mouseUp after shift action
+
+// Apply move delta to a shape based on its type
+const applyMoveDelta = (doodle, shape, origShape, diff) => {
+  switch (shape.type) {
+    case doodle.tools.rect:
+    case doodle.tools.circle:
+    case doodle.tools.ellipse:
+      shape.pos[0] = origShape.pos[0] + diff.x
+      shape.pos[1] = origShape.pos[1] + diff.y
+      break
+    case doodle.tools.polygon:
+    case doodle.tools.path:
+    case doodle.tools.closed_path:
+      shape.pos = origShape.pos.map((item, i) =>
+        i % 2 === 0 ? item + diff.x : item + diff.y
+      )
+      break
+    case doodle.tools.line:
+    case doodle.tools.arrow_line:
+      shape.pos[0] = origShape.pos[0] + diff.x
+      shape.pos[1] = origShape.pos[1] + diff.y
+      shape.pos[2] = origShape.pos[2] + diff.x
+      shape.pos[3] = origShape.pos[3] + diff.y
+      break
+    case doodle.tools.point:
+      shape.pos[0] = origShape.pos[0] + diff.x
+      shape.pos[1] = origShape.pos[1] + diff.y
+      break
+  }
+}
+
 // 获取鼠标处理器
 export const getMouseHandler = (doodle) => {
   // 工具对应的鼠标处理函数
@@ -30,7 +67,56 @@ export const getMouseHandler = (doodle) => {
       // 按下
       handleMouseDown: () => {
         const curMouseDownTimestamp = Date.now()
-        lastMouseDownTimestamp = curMouseDownTimestamp // 多边形工具下判断双击完成形状的时间戳
+        lastMouseDownTimestamp = curMouseDownTimestamp
+
+        // --- Shift key: multi-select actions ---
+        if (doodle.mouse.shiftKey) {
+          doodle.setPan(false)
+          multiSelectActionDone = true
+
+          if (doodle.hoverShape) {
+            // Shift+click shape: toggle in selection
+            // If single shape was selected, promote it to multi-selection first
+            if (doodle.tempShape?.id) {
+              const orig = doodle.shapes.find(item => item.id === doodle.tempShape.id)
+              if (orig && JSON.stringify(orig) !== JSON.stringify(doodle.tempShape)) {
+                doodle.conf.onUpdate && doodle.conf.onUpdate(_.cloneDeep(doodle.tempShape))
+              }
+              doodle.selectedShapes.add(doodle.tempShape.id)
+              doodle.cancelSelectShape()
+            }
+            doodle.toggleInSelection(doodle.hoverShape.id)
+            doodle.conf.onMultiSelect && doodle.conf.onMultiSelect(Array.from(doodle.selectedShapes))
+          } else {
+            // Shift+drag on empty: start rubber band
+            isRubberBanding = true
+            rubberBandStart = { x: doodle.mouse.dx, y: doodle.mouse.dy }
+            doodle.selectionRect = {
+              x1: doodle.mouse.dx, y1: doodle.mouse.dy,
+              x2: doodle.mouse.dx, y2: doodle.mouse.dy,
+            }
+          }
+          return
+        }
+
+        // --- Multi-select: drag selected shapes ---
+        if (doodle.selectedShapes.size > 0 && doodle.hoverShape && doodle.selectedShapes.has(doodle.hoverShape.id)) {
+          doodle.setPan(false)
+          multiDragStart = { x: doodle.mouse.dx, y: doodle.mouse.dy }
+          multiDragShapes = new Map()
+          for (const id of doodle.selectedShapes) {
+            const shape = doodle.shapes.find(s => s.id === id)
+            if (shape) multiDragShapes.set(id, _.cloneDeep(shape))
+          }
+          return
+        }
+
+        // --- Clear multi-selection on normal click ---
+        if (doodle.selectedShapes.size > 0) {
+          doodle.clearSelection()
+          doodle.conf.onMultiSelect && doodle.conf.onMultiSelect(null)
+        }
+
         // 在锚点上按下
         if (doodle.tempShape && doodle.hoverAnchor) {
           doodle.setPan(false)
@@ -64,6 +150,54 @@ export const getMouseHandler = (doodle) => {
       },
       // 抬起
       handleMouseUp: () => {
+        // --- Rubber band selection complete ---
+        if (isRubberBanding) {
+          isRubberBanding = false
+          const rect = doodle.selectionRect
+          doodle.selectionRect = null
+          if (rect) {
+            const minX = Math.min(rect.x1, rect.x2)
+            const minY = Math.min(rect.y1, rect.y2)
+            const maxX = Math.max(rect.x1, rect.x2)
+            const maxY = Math.max(rect.y1, rect.y2)
+            if (maxX - minX > 1 || maxY - minY > 1) {
+              const hits = doodle.bounds.search({ minX, minY, maxX, maxY })
+              for (const hit of hits) {
+                doodle.selectedShapes.add(hit.id)
+              }
+              doodle.conf.onMultiSelect && doodle.conf.onMultiSelect(Array.from(doodle.selectedShapes))
+            }
+          }
+          rubberBandStart = null
+          doodle.setPan(true)
+          return
+        }
+
+        // --- Multi-drag complete ---
+        if (multiDragShapes) {
+          const updates = []
+          for (const [id, origShape] of multiDragShapes) {
+            const shape = doodle.shapes.find(s => s.id === id)
+            if (shape && JSON.stringify(shape.pos) !== JSON.stringify(origShape.pos)) {
+              updates.push({ oldShape: origShape, newShape: _.cloneDeep(shape) })
+            }
+          }
+          if (updates.length > 0) {
+            doodle.conf.onMultiUpdate && doodle.conf.onMultiUpdate(updates)
+          }
+          multiDragShapes = null
+          multiDragStart = null
+          doodle.setPan(true)
+          return
+        }
+
+        // --- Skip normal handling after shift action ---
+        if (multiSelectActionDone) {
+          multiSelectActionDone = false
+          doodle.setPan(true)
+          return
+        }
+
         const curMouseDownTimestamp = Date.now()
         const diff = curMouseDownTimestamp - lastMouseDownTimestamp
         if (diff < 150) {
@@ -133,6 +267,30 @@ export const getMouseHandler = (doodle) => {
       },
       // 移动
       handleMouseMove: () => {
+        // --- Rubber band selection ---
+        if (isRubberBanding && rubberBandStart) {
+          doodle.selectionRect = {
+            x1: rubberBandStart.x, y1: rubberBandStart.y,
+            x2: doodle.mouse.dx, y2: doodle.mouse.dy,
+          }
+          return
+        }
+
+        // --- Multi-drag ---
+        if (multiDragShapes && multiDragStart && doodle.mouse.isPressed) {
+          const diff = {
+            x: doodle.mouse.dx - multiDragStart.x,
+            y: doodle.mouse.dy - multiDragStart.y,
+          }
+          for (const [id, origShape] of multiDragShapes) {
+            const shape = doodle.shapes.find(s => s.id === id)
+            if (!shape) continue
+            applyMoveDelta(doodle, shape, origShape, diff)
+            doodle.correctionTempShapeBounds(shape)
+          }
+          return
+        }
+
         // 在锚点上移动
         if (doodle.tempShape && tempAnchor && doodle.mouse.isPressed) {
           const diff = {
